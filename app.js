@@ -161,8 +161,7 @@ function abrirSheet(tipo, item) {
   edit = { tipo, id: item?.id };
   const esFijo = tipo === 'fijo';
   $('#sheetTitle').textContent = item ? (esFijo ? 'Editar fijo' : 'Editar gasto') : (esFijo ? 'Nuevo gasto fijo' : 'Nuevo gasto');
-  $('#monto').value = item ? String(item.monto).replace('.', ',') : '';
-  ajustarMonto();
+  $('#monto').value = item ? formatearMonto(String(item.monto).replace('.', ',')) : '';
   $('#nota').value = item?.nota || '';
   $('#nombre').value = item?.nombre || '';
   $('#nombreWrap').hidden = !esFijo;
@@ -176,6 +175,7 @@ function abrirSheet(tipo, item) {
   catSel = item?.cat || (esFijo ? 'subs' : null);
   renderCats();
   document.body.classList.add('open');
+  ajustarMonto();
   setTimeout(() => (esFijo && !item ? $('#nombre') : $('#monto')).focus(), 250);
 }
 function cerrarSheet() {
@@ -184,9 +184,32 @@ function cerrarSheet() {
   edit = null;
 }
 
-// el input del monto crece con lo que escribís, así queda centrado
-function ajustarMonto() { $('#monto').style.width = Math.max(2, $('#monto').value.length + 0.5) + 'ch'; }
-$('#monto').addEventListener('input', ajustarMonto);
+// Mientras escribís: pone los puntos de miles (12500 → 12.500) y ajusta el ancho
+// del input al texto real, achicando la letra si no entra en pantalla.
+function formatearMonto(v) {
+  let [ent, dec] = v.replace(/[^\d,]/g, '').split(',', 2);
+  ent = ent.replace(/^0+(?=\d)/, '').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return dec === undefined ? ent : `${ent || '0'},${dec.slice(0, 2)}`;
+}
+const medidor = document.createElement('canvas').getContext('2d');
+function ajustarMonto() {
+  const input = $('#monto');
+  const texto = input.value || input.placeholder;
+  const disponible = $('#sheet').clientWidth - 90; // menos el símbolo y márgenes
+  let size = 48;
+  const cs = getComputedStyle(input);
+  do {
+    medidor.font = `${cs.fontWeight} ${size}px ${cs.fontFamily}`;
+    var ancho = medidor.measureText(texto).width;
+  } while (ancho > disponible && (size -= 2) > 20);
+  input.style.fontSize = size + 'px';
+  input.style.width = Math.ceil(ancho) + 8 + 'px';
+}
+$('#monto').addEventListener('input', e => {
+  const v = e.target.value.replace(/\./g, '');
+  e.target.value = formatearMonto(e.data === '.' ? v + ',' : v);
+  ajustarMonto();
+});
 
 $('#catGrid').addEventListener('click', e => {
   const b = e.target.closest('[data-cat]');

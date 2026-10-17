@@ -168,7 +168,7 @@ h2 small { text-transform: none; letter-spacing: 0; font-weight: 400; }
 .amount-wrap span { font-size: 28px; color: var(--muted); }
 #monto {
   border: 0; background: none; outline: none; font-size: 48px; font-weight: 700;
-  width: 2ch; max-width: 9ch; text-align: left; letter-spacing: -.02em; font-variant-numeric: tabular-nums;
+  width: 2ch; padding: 0; text-align: left; min-width: 0; letter-spacing: -.02em; font-variant-numeric: tabular-nums;
 }
 #nombreWrap { margin-bottom: 12px; }
 .cat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
