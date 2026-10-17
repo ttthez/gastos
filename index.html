@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f6f5f2" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#141414" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Gastos">
+  <title>Gastos</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <button class="icon-btn" id="prevMes" aria-label="Mes anterior">‹</button>
+    <h1 id="mesLabel">—</h1>
+    <button class="icon-btn" id="nextMes" aria-label="Mes siguiente">›</button>
+  </header>
+
+  <main>
+    <!-- INICIO -->
+    <section id="view-inicio" class="view active">
+      <div class="total-card">
+        <span class="muted">Total del mes</span>
+        <div class="total" id="total">$0</div>
+        <div class="split">
+          <span><i class="dot dot-var"></i>Variables <b id="totalVar">$0</b></span>
+          <span><i class="dot dot-fijo"></i>Fijos <b id="totalFijo">$0</b></span>
+        </div>
+      </div>
+
+      <h2>Por categoría</h2>
+      <div id="porCategoria" class="cat-list"></div>
+
+      <h2>Movimientos</h2>
+      <div id="movimientos" class="mov-list"></div>
+    </section>
+
+    <!-- FIJOS -->
+    <section id="view-fijos" class="view">
+      <div class="total-card">
+        <span class="muted">Gastos fijos mensuales</span>
+        <div class="total" id="fijosTotal">$0</div>
+        <div class="split"><span>Pagados este mes <b id="fijosPagados">0/0</b></span></div>
+      </div>
+      <h2>Tus fijos <small class="muted">· tocá el círculo para marcar pagado</small></h2>
+      <div id="fijosList" class="mov-list"></div>
+      <button class="btn ghost full" id="addFijoBtn">+ Agregar gasto fijo</button>
+    </section>
+
+    <!-- AJUSTES -->
+    <section id="view-ajustes" class="view">
+      <h2>Datos</h2>
+      <p class="muted small">Tus datos se guardan solo en este dispositivo. Hacé una copia de vez en cuando.</p>
+      <button class="btn ghost full" id="exportBtn">Exportar copia (.json)</button>
+      <label class="btn ghost full">Importar copia
+        <input type="file" id="importInput" accept="application/json" hidden>
+      </label>
+      <button class="btn ghost full" id="csvBtn">Exportar mes a CSV</button>
+      <h2>Moneda</h2>
+      <input id="monedaInput" class="input" maxlength="4" placeholder="$">
+      <h2>Zona peligrosa</h2>
+      <button class="btn danger full" id="resetBtn">Borrar todo</button>
+    </section>
+  </main>
+
+  <button class="fab" id="fab" aria-label="Agregar gasto">+</button>
+
+  <nav class="tabs">
+    <button data-view="inicio" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Inicio</button>
+    <button data-view="fijos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v4h-4"/></svg>Fijos</button>
+    <button data-view="ajustes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>Ajustes</button>
+  </nav>
+
+  <!-- HOJA: NUEVO GASTO -->
+  <div class="sheet-bg" id="sheetBg"></div>
+  <form class="sheet" id="sheet" autocomplete="off">
+    <div class="grab"></div>
+    <h3 id="sheetTitle">Nuevo gasto</h3>
+    <div class="amount-wrap">
+      <span id="monedaSym">$</span>
+      <input id="monto" inputmode="decimal" placeholder="0" required>
+    </div>
+    <div id="nombreWrap" hidden>
+      <input id="nombre" class="input" placeholder="Nombre (ej: Gym, Netflix)">
+    </div>
+    <div class="cat-grid" id="catGrid"></div>
+    <div class="row">
+      <input id="nota" class="input" placeholder="Nota (opcional)">
+      <input id="fecha" class="input date" type="date">
+      <input id="dia" class="input date" type="number" min="1" max="31" placeholder="Día" hidden>
+    </div>
+    <div class="row">
+      <button type="button" class="btn danger" id="deleteBtn" hidden>Eliminar</button>
+      <button type="submit" class="btn primary grow">Guardar</button>
+    </div>
+  </form>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
