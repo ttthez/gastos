@@ -312,6 +312,31 @@ $('#importInput').addEventListener('change', async e => {
   e.target.value = '';
 });
 
+// suma los gastos de un archivo (copia completa o lista de gastos) sin borrar los actuales
+$('#sumarInput').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const d = JSON.parse(await file.text());
+    const lista = Array.isArray(d) ? d : d.gastos;
+    if (!Array.isArray(lista)) throw 0;
+    const clave = g => `${g.fecha}|${g.monto}|${g.nota || ''}`;
+    const ids = new Set(db.gastos.map(g => g.id));
+    const claves = new Set(db.gastos.map(clave));
+    let sumados = 0, repetidos = 0;
+    for (const g of lista) {
+      const monto = Number(g.monto);
+      if (!(monto > 0) || !/^\d{4}-\d{2}-\d{2}$/.test(g.fecha || '')) continue;
+      const nuevo = { id: g.id || uid(), monto, cat: CAT[g.cat] ? g.cat : 'otros', nota: String(g.nota || ''), fecha: g.fecha };
+      if (ids.has(nuevo.id) || claves.has(clave(nuevo))) { repetidos++; continue; }
+      db.gastos.push(nuevo); ids.add(nuevo.id); claves.add(clave(nuevo)); sumados++;
+    }
+    guardar(); render();
+    toast(`${sumados} gastos sumados` + (repetidos ? ` · ${repetidos} ya estaban` : ''));
+  } catch { toast('Archivo inválido'); }
+  e.target.value = '';
+});
+
 $('#csvBtn').addEventListener('click', () => {
   const filas = [['Fecha', 'Tipo', 'Categoría', 'Detalle', 'Monto']];
   db.gastos.filter(g => g.fecha.startsWith(mesActual)).sort((a, b) => a.fecha.localeCompare(b.fecha))
