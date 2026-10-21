@@ -41,4 +41,4 @@ Los gastos se guardan en el almacenamiento local del navegador de **ese** dispos
 | `app.js` | Lógica: gastos, fijos, categorías, resumen |
 | `sw.js`, `manifest.json`, `icon*` | Para instalarla y usarla offline |
 
-Para agregar o cambiar categorías, editá la lista `CATEGORIAS` al principio de `app.js`.
+Las categorías se agregan o quitan desde **Ajustes → Categorías**. `CATEGORIAS`, al principio de `app.js`, es la lista de fábrica.

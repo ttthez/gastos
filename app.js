@@ -17,7 +17,6 @@ const CATEGORIAS = [
   { id: 'educ',     nombre: 'Educación',   emoji: '📚' },
   { id: 'otros',    nombre: 'Otros',       emoji: '•' },
 ];
-const CAT = Object.fromEntries(CATEGORIAS.map(c => [c.id, c]));
 const KEY = 'gastos-app-v1';
 
 let db = cargar();
@@ -25,6 +24,17 @@ let mesActual = hoyISO().slice(0, 7); // 'YYYY-MM'
 let edit = null; // { tipo: 'gasto'|'fijo', id?: string }
 let catSel = null;
 let monedaSel = 'ARS'; // moneda del gasto que estás cargando
+let catFiltro = null;  // categoría tocada en Inicio: muestra solo sus gastos
+
+// Las categorías se pueden agregar o quitar desde Ajustes; si nunca las tocaste se usan las de fábrica.
+// "Otros" siempre existe: ahí van los gastos de una categoría que se quita.
+let CAT = {};
+const cats = () => db.categorias?.length ? db.categorias : CATEGORIAS;
+function refrescarCats() {
+  CAT = Object.fromEntries(cats().map(c => [c.id, c]));
+  CAT.otros ??= CATEGORIAS.find(c => c.id === 'otros');
+}
+refrescarCats();
 
 function cargar() {
   try {
@@ -90,12 +100,14 @@ const amtHtml = (x, pesos) => x.moneda === 'USD' ? `${fmtUsd(x.usd)}<small>${fmt
 
 // ---------- Render ----------
 function render() {
+  refrescarCats();
   $('#mesLabel').textContent = mesLabel(mesActual);
   $('#monedaSym').textContent = db.moneda;
   $('#monedaInput').value = db.moneda;
   $('#tcInput').value = db.tc || '';
   renderInicio();
   renderFijos();
+  renderCategoriasAjustes();
 }
 
 function renderInicio() {
@@ -122,12 +134,15 @@ function renderInicio() {
   const max = filas[0]?.t || 1;
   $('#porCategoria').innerHTML = filas.map(r => {
     const c = CAT[r.id] || CAT.otros;
-    return `<div class="cat-row">
+    return `<button class="cat-row ${r.id === catFiltro ? 'sel' : ''}" data-filtro="${r.id}">
       <div class="head"><span>${c.emoji} ${c.nombre}</span><b>${fmt(r.t)}</b></div>
       <div class="bar" style="display:flex">
         <i style="width:${r.v / max * 100}%"></i><i class="fijo" style="width:${r.f / max * 100}%"></i>
-      </div></div>`;
+      </div></button>`;
   }).join('');
+
+  if (catFiltro) return renderFiltro(gastos, fijos);
+  $('#movTitulo').textContent = 'Movimientos';
 
   // movimientos agrupados por día
   if (!gastos.length) {
@@ -144,6 +159,26 @@ function renderInicio() {
       <div class="amt">${amtHtml(g, g.monto)}</div></button>`;
   }
   $('#movimientos').innerHTML = html;
+}
+
+// gastos de una sola categoría en el mes, cada uno con su fecha
+function renderFiltro(gastosMes, fijosMes) {
+  const c = CAT[catFiltro] || CAT.otros;
+  const delaCat = x => (CAT[x.cat] ? x.cat : 'otros') === catFiltro;
+  const gastos = gastosMes.filter(delaCat);
+  const fijos = fijosMes.filter(delaCat);
+  const total = gastos.reduce((s, g) => s + g.monto, 0) + fijos.reduce((s, f) => s + montoFijo(f), 0);
+  $('#movTitulo').innerHTML = `${c.emoji} ${esc(c.nombre)} · ${fmt(total)} <button class="link" id="quitarFiltro">✕ ver todos</button>`;
+  const fecha = iso => { const [, m, d] = iso.split('-'); return `${d}/${m}`; };
+  let html = gastos.map(g => `<button class="mov" data-gasto="${g.id}">
+      <div class="emoji">${c.emoji}</div>
+      <div class="info"><b>${fecha(g.fecha)} · ${diaLabel(g.fecha)}</b>${g.nota ? `<small>${esc(g.nota)}</small>` : ''}</div>
+      <div class="amt">${amtHtml(g, g.monto)}</div></button>`).join('');
+  html += fijos.map(f => `<button class="mov" data-fijo-ir="${f.id}">
+      <div class="emoji">${c.emoji}</div>
+      <div class="info"><b>${esc(f.nombre)}</b><small>Fijo mensual${f.dia ? ` · día ${f.dia}` : ''}</small></div>
+      <div class="amt">${amtHtml(f, montoFijo(f))}</div></button>`).join('');
+  $('#movimientos').innerHTML = html || `<div class="empty">Sin gastos de ${esc(c.nombre)} este mes.</div>`;
 }
 
 function renderFijos() {
@@ -166,7 +201,7 @@ function renderFijos() {
 
 // ---------- Hoja de carga ----------
 function renderCats() {
-  $('#catGrid').innerHTML = CATEGORIAS.map(c =>
+  $('#catGrid').innerHTML = cats().map(c =>
     `<button type="button" class="cat ${c.id === catSel ? 'sel' : ''}" data-cat="${c.id}"><span>${c.emoji}</span>${c.nombre}</button>`
   ).join('');
 }
@@ -309,7 +344,60 @@ $('#nextMes').addEventListener('click', () => { mesActual = sumarMes(mesActual, 
 
 $('#movimientos').addEventListener('click', e => {
   const b = e.target.closest('[data-gasto]');
-  if (b) abrirSheet('gasto', db.gastos.find(g => g.id === b.dataset.gasto));
+  if (b) return abrirSheet('gasto', db.gastos.find(g => g.id === b.dataset.gasto));
+  const f = e.target.closest('[data-fijo-ir]');
+  if (f) abrirSheet('fijo', db.fijos.find(x => x.id === f.dataset.fijoIr));
+});
+// tocar una categoría filtra los movimientos; tocarla de nuevo (o "ver todos") los muestra todos
+$('#porCategoria').addEventListener('click', e => {
+  const r = e.target.closest('[data-filtro]');
+  if (!r) return;
+  catFiltro = catFiltro === r.dataset.filtro ? null : r.dataset.filtro;
+  renderInicio();
+  if (catFiltro) $('#movTitulo').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+$('#movTitulo').addEventListener('click', e => {
+  if (!e.target.closest('#quitarFiltro')) return;
+  catFiltro = null;
+  renderInicio();
+});
+
+// ---------- Categorías (Ajustes) ----------
+function renderCategoriasAjustes() {
+  const usos = id => db.gastos.filter(g => g.cat === id).length + db.fijos.filter(f => f.cat === id).length;
+  $('#catsList').innerHTML = cats().map(c => {
+    const n = usos(c.id);
+    return `<div class="mov">
+      <div class="emoji">${c.emoji}</div>
+      <div class="info"><b>${esc(c.nombre)}</b><small>${n ? `${n} gasto${n === 1 ? '' : 's'}` : 'Sin gastos'}</small></div>
+      ${c.id === 'otros' ? '' : `<button class="link danger-link" data-quitar-cat="${c.id}">Quitar</button>`}
+    </div>`;
+  }).join('');
+}
+$('#catsList').addEventListener('click', e => {
+  const b = e.target.closest('[data-quitar-cat]');
+  if (!b) return;
+  const id = b.dataset.quitarCat;
+  const c = CAT[id];
+  const n = db.gastos.filter(g => g.cat === id).length + db.fijos.filter(f => f.cat === id).length;
+  if (!confirm(`¿Quitar la categoría "${c.nombre}"?` + (n ? `\n\nSus ${n} gastos pasan a "Otros".` : ''))) return;
+  db.gastos.forEach(g => { if (g.cat === id) g.cat = 'otros'; });
+  db.fijos.forEach(f => { if (f.cat === id) f.cat = 'otros'; });
+  db.categorias = cats().filter(x => x.id !== id);
+  if (catFiltro === id) catFiltro = null;
+  guardar(); render(); toast('Categoría quitada');
+});
+$('#catForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const nombre = $('#catNombre').value.trim();
+  if (!nombre) return toast('Poné el nombre de la categoría');
+  if (cats().some(c => c.nombre.toLowerCase() === nombre.toLowerCase())) return toast('Esa categoría ya existe');
+  const nueva = { id: 'c' + uid(), nombre, emoji: $('#catEmoji').value.trim() || '🏷️' };
+  // las nuevas van antes de "Otros", que queda siempre al final
+  const lista = cats().filter(c => c.id !== 'otros');
+  db.categorias = [...lista, nueva, CAT.otros];
+  $('#catNombre').value = ''; $('#catEmoji').value = '';
+  guardar(); render(); toast('Categoría agregada ✓');
 });
 $('#fijosList').addEventListener('click', e => {
   const p = e.target.closest('[data-pago]');
@@ -401,7 +489,7 @@ $('#monedaInput').addEventListener('change', e => {
 
 $('#resetBtn').addEventListener('click', () => {
   if (!confirm('¿Borrar TODOS tus gastos? No se puede deshacer.')) return;
-  db = { moneda: db.moneda, gastos: [], fijos: [], pagos: {} };
+  db = { moneda: db.moneda, tc: db.tc, categorias: db.categorias, gastos: [], fijos: [], pagos: {} };
   guardar(); render(); toast('Datos borrados');
 });
 

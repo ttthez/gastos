@@ -37,7 +37,7 @@
       <h2>Por categoría</h2>
       <div id="porCategoria" class="cat-list"></div>
 
-      <h2>Movimientos</h2>
+      <h2 id="movTitulo">Movimientos</h2>
       <div id="movimientos" class="mov-list"></div>
     </section>
 
@@ -66,6 +66,13 @@
       </label>
       <p class="muted small">"Importar copia" reemplaza todo. "Importar y sumar" agrega los gastos del archivo sin borrar nada y saltea los que ya tenés.</p>
       <button class="btn ghost full" id="csvBtn">Exportar mes a CSV</button>
+      <h2>Categorías</h2>
+      <div id="catsList" class="mov-list"></div>
+      <form id="catForm" class="row cat-form">
+        <input id="catEmoji" class="input emoji-input" maxlength="4" placeholder="🏷️" aria-label="Emoji">
+        <input id="catNombre" class="input" placeholder="Nueva categoría (ej: Peluquería)">
+        <button type="submit" class="btn primary">Agregar</button>
+      </form>
       <h2>Moneda</h2>
       <input id="monedaInput" class="input" maxlength="4" placeholder="$">
       <h2>Dólar</h2>
