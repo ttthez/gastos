@@ -31,6 +31,7 @@
           <span><i class="dot dot-var"></i>Variables <b id="totalVar">$0</b></span>
           <span><i class="dot dot-fijo"></i>Fijos <b id="totalFijo">$0</b></span>
         </div>
+        <div class="muted usd-line" id="totalUsd" hidden></div>
       </div>
 
       <h2>Por categoría</h2>
@@ -67,6 +68,9 @@
       <button class="btn ghost full" id="csvBtn">Exportar mes a CSV</button>
       <h2>Moneda</h2>
       <input id="monedaInput" class="input" maxlength="4" placeholder="$">
+      <h2>Dólar</h2>
+      <input id="tcInput" class="input" inputmode="decimal" placeholder="Cotización: pesos por US$ (ej: 1450)">
+      <p class="muted small">Pasa a pesos tus fijos en dólares (suscripciones) y es la cotización sugerida al cargar un gasto en US$. Se actualiza sola con la última que uses.</p>
       <h2>Zona peligrosa</h2>
       <button class="btn danger full" id="resetBtn">Borrar todo</button>
     </section>
@@ -88,6 +92,13 @@
     <div class="amount-wrap">
       <span id="monedaSym">$</span>
       <input id="monto" inputmode="decimal" placeholder="0" required>
+    </div>
+    <div class="moneda-toggle" id="monedaToggle">
+      <button type="button" data-moneda="ARS">$ Pesos</button>
+      <button type="button" data-moneda="USD">US$ Dólares</button>
+    </div>
+    <div class="row" id="tcWrap" hidden>
+      <input id="tcGasto" class="input" inputmode="decimal" placeholder="Cotización: pesos por US$">
     </div>
     <div id="nombreWrap" hidden>
       <input id="nombre" class="input" placeholder="Nombre (ej: Gym, Netflix)">

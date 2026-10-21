@@ -1,5 +1,5 @@
 // Cache simple para que la app abra sin conexión
-const CACHE = 'gastos-v3';
+const CACHE = 'gastos-v4';
 const ARCHIVOS = ['./', 'index.html', 'style.css', 'app.js', 'manifest.json', 'icon.svg', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {

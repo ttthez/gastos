@@ -180,6 +180,11 @@ h2 small { text-transform: none; letter-spacing: 0; font-weight: 400; }
 .cat span { font-size: 22px; }
 .cat.sel { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
 .row { display: flex; gap: 8px; margin-bottom: 10px; }
+.moneda-toggle { display: flex; gap: 6px; justify-content: center; margin: -6px 0 14px; }
+.moneda-toggle button { border: 1px solid var(--line); background: var(--card); color: var(--muted); border-radius: 999px; padding: 6px 14px; font: inherit; font-size: 14px; }
+.moneda-toggle button.sel { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
+.usd-line { font-size: 14px; margin-top: 8px; }
+.mov .amt small { display: block; color: var(--muted); font-size: 12px; font-weight: 400; text-align: right; }
 .row .date { width: 150px; flex: none; }
 #dia.date { width: 90px; }
 

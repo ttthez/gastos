@@ -24,6 +24,7 @@ let db = cargar();
 let mesActual = hoyISO().slice(0, 7); // 'YYYY-MM'
 let edit = null; // { tipo: 'gasto'|'fijo', id?: string }
 let catSel = null;
+let monedaSel = 'ARS'; // moneda del gasto que estás cargando
 
 function cargar() {
   try {
@@ -81,11 +82,18 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;'
 // Fijos vigentes en un mes: creados en o antes del mes, y no dados de baja antes
 const fijosDelMes = ym => db.fijos.filter(f => f.desde <= ym && (!f.hasta || f.hasta >= ym));
 
+// Dólares: un gasto en US$ guarda usd y la cotización (tc) y su monto en pesos.
+// Los fijos en US$ se pasan a pesos con la cotización de Ajustes, así siguen el dólar.
+const montoFijo = f => f.moneda === 'USD' ? Math.round(f.usd * (Number(db.tc) || f.tc || 0)) : f.monto;
+const fmtUsd = n => 'US$ ' + Number(n).toLocaleString('es-AR', { maximumFractionDigits: 2 });
+const amtHtml = (x, pesos) => x.moneda === 'USD' ? `${fmtUsd(x.usd)}<small>${fmt(pesos)}</small>` : fmt(pesos);
+
 // ---------- Render ----------
 function render() {
   $('#mesLabel').textContent = mesLabel(mesActual);
   $('#monedaSym').textContent = db.moneda;
   $('#monedaInput').value = db.moneda;
+  $('#tcInput').value = db.tc || '';
   renderInicio();
   renderFijos();
 }
@@ -95,7 +103,10 @@ function renderInicio() {
     .sort((a, b) => b.fecha.localeCompare(a.fecha) || b.id.localeCompare(a.id));
   const fijos = fijosDelMes(mesActual);
   const totVar = gastos.reduce((s, g) => s + g.monto, 0);
-  const totFijo = fijos.reduce((s, f) => s + f.monto, 0);
+  const totFijo = fijos.reduce((s, f) => s + montoFijo(f), 0);
+  const totUsd = gastos.concat(fijos).filter(x => x.moneda === 'USD').reduce((s, x) => s + Number(x.usd), 0);
+  $('#totalUsd').hidden = !totUsd;
+  $('#totalUsd').textContent = `Incluye ${fmtUsd(totUsd)} en gastos en dólares`;
   $('#total').textContent = fmt(totVar + totFijo);
   $('#totalVar').textContent = fmt(totVar);
   $('#totalFijo').textContent = fmt(totFijo);
@@ -103,7 +114,7 @@ function renderInicio() {
   // por categoría (variables + fijos)
   const porCat = {};
   gastos.forEach(g => { porCat[g.cat] ??= { v: 0, f: 0 }; porCat[g.cat].v += g.monto; });
-  fijos.forEach(f => { porCat[f.cat] ??= { v: 0, f: 0 }; porCat[f.cat].f += f.monto; });
+  fijos.forEach(f => { porCat[f.cat] ??= { v: 0, f: 0 }; porCat[f.cat].f += montoFijo(f); });
   const filas = Object.entries(porCat).map(([id, x]) => ({ id, ...x, t: x.v + x.f })).sort((a, b) => b.t - a.t);
   const max = filas[0]?.t || 1;
   $('#porCategoria').innerHTML = filas.map(r => {
@@ -127,7 +138,7 @@ function renderInicio() {
     html += `<button class="mov" data-gasto="${g.id}">
       <div class="emoji">${c.emoji}</div>
       <div class="info"><b>${c.nombre}</b>${g.nota ? `<small>${esc(g.nota)}</small>` : ''}</div>
-      <div class="amt">${fmt(g.monto)}</div></button>`;
+      <div class="amt">${amtHtml(g, g.monto)}</div></button>`;
   }
   $('#movimientos').innerHTML = html;
 }
@@ -135,7 +146,7 @@ function renderInicio() {
 function renderFijos() {
   const fijos = fijosDelMes(mesActual).sort((a, b) => (a.dia || 99) - (b.dia || 99));
   const pagados = db.pagos[mesActual] || [];
-  $('#fijosTotal').textContent = fmt(fijos.reduce((s, f) => s + f.monto, 0));
+  $('#fijosTotal').textContent = fmt(fijos.reduce((s, f) => s + montoFijo(f), 0));
   $('#fijosPagados').textContent = `${fijos.filter(f => pagados.includes(f.id)).length}/${fijos.length}`;
   $('#fijosList').innerHTML = fijos.length ? fijos.map(f => {
     const c = CAT[f.cat] || CAT.otros;
@@ -145,7 +156,7 @@ function renderFijos() {
       <button class="mov fijo-btn" data-fijo="${f.id}">
         <div class="emoji">${c.emoji}</div>
         <div class="info"><b>${esc(f.nombre)}</b><small>${c.nombre}${f.dia ? ` · día ${f.dia}` : ''}</small></div>
-        <div class="amt">${fmt(f.monto)}</div>
+        <div class="amt">${amtHtml(f, montoFijo(f))}</div>
       </button></div>`;
   }).join('') : `<div class="empty">Agregá tus gastos fijos:<br>gym, suscripciones, alquiler…</div>`;
 }
@@ -161,7 +172,10 @@ function abrirSheet(tipo, item) {
   edit = { tipo, id: item?.id };
   const esFijo = tipo === 'fijo';
   $('#sheetTitle').textContent = item ? (esFijo ? 'Editar fijo' : 'Editar gasto') : (esFijo ? 'Nuevo gasto fijo' : 'Nuevo gasto');
-  $('#monto').value = item ? formatearMonto(String(item.monto).replace('.', ',')) : '';
+  monedaSel = item?.moneda === 'USD' ? 'USD' : 'ARS';
+  const valor = item ? (monedaSel === 'USD' ? item.usd : item.monto) : '';
+  $('#monto').value = item ? formatearMonto(String(valor).replace('.', ',')) : '';
+  $('#tcGasto').value = item?.tc || db.tc || '';
   $('#nota').value = item?.nota || '';
   $('#nombre').value = item?.nombre || '';
   $('#nombreWrap').hidden = !esFijo;
@@ -174,10 +188,26 @@ function abrirSheet(tipo, item) {
   $('#deleteBtn').hidden = !item;
   catSel = item?.cat || (esFijo ? 'subs' : null);
   renderCats();
+  aplicarMoneda();
   document.body.classList.add('open');
   ajustarMonto();
   setTimeout(() => (esFijo && !item ? $('#nombre') : $('#monto')).focus(), 250);
 }
+function aplicarMoneda() {
+  const usd = monedaSel === 'USD';
+  $('#monedaToggle').querySelectorAll('button').forEach(b => b.classList.toggle('sel', b.dataset.moneda === monedaSel));
+  $('#monedaSym').textContent = usd ? 'US$' : db.moneda;
+  // los fijos usan la cotización de Ajustes; los gastos piden la del día
+  $('#tcWrap').hidden = !usd || edit?.tipo !== 'gasto';
+  ajustarMonto();
+}
+$('#monedaToggle').addEventListener('click', e => {
+  const b = e.target.closest('[data-moneda]');
+  if (!b) return;
+  monedaSel = b.dataset.moneda;
+  aplicarMoneda();
+});
+
 function cerrarSheet() {
   document.body.classList.remove('open');
   document.activeElement?.blur();
@@ -220,19 +250,28 @@ $('#catGrid').addEventListener('click', e => {
 
 $('#sheet').addEventListener('submit', e => {
   e.preventDefault();
-  const monto = parseMonto($('#monto').value);
-  if (!monto) return toast('Ingresá un monto');
+  const valor = parseMonto($('#monto').value);
+  if (!valor) return toast('Ingresá un monto');
   if (!catSel) return toast('Elegí una categoría');
 
+  // en pesos se borran los datos de dólares por si el gasto antes estaba en US$
+  let plata = { monto: valor, moneda: undefined, usd: undefined, tc: undefined };
+  if (monedaSel === 'USD') {
+    const tc = edit.tipo === 'gasto' ? parseMonto($('#tcGasto').value) : Number(db.tc);
+    if (!tc) return toast(edit.tipo === 'gasto' ? 'Poné la cotización del dólar' : 'Poné la cotización del dólar en Ajustes');
+    if (edit.tipo === 'gasto') db.tc = tc;
+    plata = { monto: Math.round(valor * tc), moneda: 'USD', usd: valor, tc };
+  }
+
   if (edit.tipo === 'gasto') {
-    const data = { monto, cat: catSel, nota: $('#nota').value.trim(), fecha: $('#fecha').value || hoyISO() };
+    const data = { ...plata, cat: catSel, nota: $('#nota').value.trim(), fecha: $('#fecha').value || hoyISO() };
     if (edit.id) Object.assign(db.gastos.find(g => g.id === edit.id), data);
     else db.gastos.push({ id: uid(), ...data });
     mesActual = data.fecha.slice(0, 7);
   } else {
     const nombre = $('#nombre').value.trim() || CAT[catSel].nombre;
     const dia = parseInt($('#dia').value) || null;
-    const data = { monto, cat: catSel, nombre, dia };
+    const data = { ...plata, cat: catSel, nombre, dia };
     if (edit.id) Object.assign(db.fijos.find(f => f.id === edit.id), data);
     else db.fijos.push({ id: uid(), desde: mesActual, ...data });
   }
@@ -328,6 +367,7 @@ $('#sumarInput').addEventListener('change', async e => {
       const monto = Number(g.monto);
       if (!(monto > 0) || !/^\d{4}-\d{2}-\d{2}$/.test(g.fecha || '')) continue;
       const nuevo = { id: g.id || uid(), monto, cat: CAT[g.cat] ? g.cat : 'otros', nota: String(g.nota || ''), fecha: g.fecha };
+      if (g.moneda === 'USD' && Number(g.usd) > 0) Object.assign(nuevo, { moneda: 'USD', usd: Number(g.usd), tc: Number(g.tc) || undefined });
       if (ids.has(nuevo.id) || claves.has(clave(nuevo))) { repetidos++; continue; }
       db.gastos.push(nuevo); ids.add(nuevo.id); claves.add(clave(nuevo)); sumados++;
     }
@@ -338,12 +378,17 @@ $('#sumarInput').addEventListener('change', async e => {
 });
 
 $('#csvBtn').addEventListener('click', () => {
-  const filas = [['Fecha', 'Tipo', 'Categoría', 'Detalle', 'Monto']];
+  const filas = [['Fecha', 'Tipo', 'Categoría', 'Detalle', 'Monto', 'US$']];
   db.gastos.filter(g => g.fecha.startsWith(mesActual)).sort((a, b) => a.fecha.localeCompare(b.fecha))
-    .forEach(g => filas.push([g.fecha, 'Variable', CAT[g.cat]?.nombre || g.cat, g.nota || '', g.monto]));
-  fijosDelMes(mesActual).forEach(f => filas.push([mesActual, 'Fijo', CAT[f.cat]?.nombre || f.cat, f.nombre, f.monto]));
+    .forEach(g => filas.push([g.fecha, 'Variable', CAT[g.cat]?.nombre || g.cat, g.nota || '', g.monto, g.moneda === 'USD' ? g.usd : '']));
+  fijosDelMes(mesActual).forEach(f => filas.push([mesActual, 'Fijo', CAT[f.cat]?.nombre || f.cat, f.nombre, montoFijo(f), f.moneda === 'USD' ? f.usd : '']));
   const csv = filas.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(';')).join('\n');
   descargar(`gastos-${mesActual}.csv`, '﻿' + csv, 'text/csv');
+});
+
+$('#tcInput').addEventListener('change', e => {
+  db.tc = parseMonto(e.target.value) || undefined;
+  guardar(); render();
 });
 
 $('#monedaInput').addEventListener('change', e => {
