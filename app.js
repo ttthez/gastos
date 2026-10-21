@@ -104,9 +104,12 @@ function renderInicio() {
   const fijos = fijosDelMes(mesActual);
   const totVar = gastos.reduce((s, g) => s + g.monto, 0);
   const totFijo = fijos.reduce((s, f) => s + montoFijo(f), 0);
-  const totUsd = gastos.concat(fijos).filter(x => x.moneda === 'USD').reduce((s, x) => s + Number(x.usd), 0);
+  // lo pagado en pesos y lo pagado en dólares, cada uno con su número
+  const enUsd = gastos.concat(fijos).filter(x => x.moneda === 'USD');
+  const totUsd = enUsd.reduce((s, x) => s + Number(x.usd), 0);
+  const usdEnPesos = enUsd.reduce((s, x) => s + (x.desde ? montoFijo(x) : x.monto), 0);
   $('#totalUsd').hidden = !totUsd;
-  $('#totalUsd').textContent = `Incluye ${fmtUsd(totUsd)} en gastos en dólares`;
+  $('#totalUsd').innerHTML = `En pesos <b>${fmt(totVar + totFijo - usdEnPesos)}</b> · En dólares <b>${fmtUsd(totUsd)}</b> (${fmt(usdEnPesos)})`;
   $('#total').textContent = fmt(totVar + totFijo);
   $('#totalVar').textContent = fmt(totVar);
   $('#totalFijo').textContent = fmt(totFijo);
