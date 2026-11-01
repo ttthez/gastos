@@ -287,7 +287,6 @@ function abrirSheet(tipo, item) {
   renderMedios();
   aplicarMoneda();
   document.body.classList.add('open');
-  abrirHistoria();
   ajustarMonto();
   setTimeout(() => (esFijo && !item ? $('#nombre') : $('#monto')).focus(), 250);
 }
@@ -306,8 +305,7 @@ $('#monedaToggle').addEventListener('click', e => {
   aplicarMoneda();
 });
 
-function cerrarSheet(desdeAtras) {
-  if (!desdeAtras) cerrarHistoria();
+function cerrarSheet() {
   document.body.classList.remove('open');
   document.activeElement?.blur();
   edit = null;
@@ -397,13 +395,9 @@ $('#deleteBtn').addEventListener('click', () => {
 });
 
 // ---------- Cerrar las hojas de carga ----------
-// Con la ✕, tocando afuera, deslizando hacia abajo o con "atrás" del celular.
-// Al abrir una hoja se suma un paso al historial, así "atrás" la cierra en vez de salir de la app.
+// Con "Cancelar" (abajo, al lado de Guardar), con la ✕, tocando afuera o deslizando hacia abajo
 const hojaAbierta = () => document.body.classList.contains('open') || document.body.classList.contains('open-caja');
-function abrirHistoria() { if (!history.state?.hoja) history.pushState({ hoja: 1 }, ''); }
-function cerrarHistoria() { if (history.state?.hoja) history.back(); }
-window.addEventListener('popstate', () => { if (hojaAbierta()) { cerrarSheet(true); cerrarCaja(true); } });
-function cerrarHojas() { cerrarSheet(); cerrarCaja(true); }
+function cerrarHojas() { cerrarSheet(); cerrarCaja(); }
 document.querySelectorAll('[data-cerrar]').forEach(b => b.addEventListener('click', cerrarHojas));
 // deslizar hacia abajo desde arriba de la hoja (cuando no está scrolleada) la cierra
 document.querySelectorAll('.sheet').forEach(hoja => {
@@ -634,10 +628,8 @@ function abrirCaja(modo, mov) {
   $('#cajaCampos').innerHTML = html;
   $('#cajaBorrar').hidden = !mov;
   document.body.classList.add('open-caja');
-  abrirHistoria();
 }
-function cerrarCaja(desdeAtras) {
-  if (!desdeAtras) cerrarHistoria();
+function cerrarCaja() {
   document.body.classList.remove('open-caja');
   document.activeElement?.blur();
   cajaModo = null; cajaEdit = null;
