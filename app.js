@@ -287,6 +287,7 @@ function abrirSheet(tipo, item) {
   renderMedios();
   aplicarMoneda();
   document.body.classList.add('open');
+  abrirHistoria();
   ajustarMonto();
   setTimeout(() => (esFijo && !item ? $('#nombre') : $('#monto')).focus(), 250);
 }
@@ -305,7 +306,8 @@ $('#monedaToggle').addEventListener('click', e => {
   aplicarMoneda();
 });
 
-function cerrarSheet() {
+function cerrarSheet(desdeAtras) {
+  if (!desdeAtras) cerrarHistoria();
   document.body.classList.remove('open');
   document.activeElement?.blur();
   edit = null;
@@ -394,11 +396,41 @@ $('#deleteBtn').addEventListener('click', () => {
   guardar(); cerrarSheet(); render(); toast('Eliminado');
 });
 
+// ---------- Cerrar las hojas de carga ----------
+// Con la ✕, tocando afuera, deslizando hacia abajo o con "atrás" del celular.
+// Al abrir una hoja se suma un paso al historial, así "atrás" la cierra en vez de salir de la app.
+const hojaAbierta = () => document.body.classList.contains('open') || document.body.classList.contains('open-caja');
+function abrirHistoria() { if (!history.state?.hoja) history.pushState({ hoja: 1 }, ''); }
+function cerrarHistoria() { if (history.state?.hoja) history.back(); }
+window.addEventListener('popstate', () => { if (hojaAbierta()) { cerrarSheet(true); cerrarCaja(true); } });
+function cerrarHojas() { cerrarSheet(); cerrarCaja(true); }
+document.querySelectorAll('[data-cerrar]').forEach(b => b.addEventListener('click', cerrarHojas));
+// deslizar hacia abajo desde arriba de la hoja (cuando no está scrolleada) la cierra
+document.querySelectorAll('.sheet').forEach(hoja => {
+  let y0 = null, dy = 0;
+  hoja.addEventListener('touchstart', e => {
+    y0 = hoja.scrollTop <= 0 && !e.target.closest('input, .cat-grid') ? e.touches[0].clientY : null; dy = 0;
+  }, { passive: true });
+  hoja.addEventListener('touchmove', e => {
+    if (y0 === null) return;
+    dy = Math.max(0, e.touches[0].clientY - y0);
+    hoja.classList.add('arrastrando');
+    hoja.style.transform = `translateY(${dy}px)`;
+  }, { passive: true });
+  hoja.addEventListener('touchend', () => {
+    if (y0 === null) return;
+    hoja.classList.remove('arrastrando');
+    hoja.style.transform = '';
+    if (dy > 90) cerrarHojas();
+    y0 = null;
+  });
+});
+
 // ---------- Eventos ----------
 $('#fab').addEventListener('click', () => abrirSheet($('#view-fijos').classList.contains('active') ? 'fijo' : 'gasto'));
 $('#addFijoBtn').addEventListener('click', () => abrirSheet('fijo'));
-$('#sheetBg').addEventListener('click', () => { cerrarSheet(); cerrarCaja(); });
-document.addEventListener('keydown', e => { if (e.key === 'Escape') { cerrarSheet(); cerrarCaja(); } });
+$('#sheetBg').addEventListener('click', cerrarHojas);
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && hojaAbierta()) cerrarHojas(); });
 
 $('#prevMes').addEventListener('click', () => { mesActual = sumarMes(mesActual, -1); render(); });
 $('#nextMes').addEventListener('click', () => { mesActual = sumarMes(mesActual, 1); render(); });
@@ -602,8 +634,10 @@ function abrirCaja(modo, mov) {
   $('#cajaCampos').innerHTML = html;
   $('#cajaBorrar').hidden = !mov;
   document.body.classList.add('open-caja');
+  abrirHistoria();
 }
-function cerrarCaja() {
+function cerrarCaja(desdeAtras) {
+  if (!desdeAtras) cerrarHistoria();
   document.body.classList.remove('open-caja');
   document.activeElement?.blur();
   cajaModo = null; cajaEdit = null;
