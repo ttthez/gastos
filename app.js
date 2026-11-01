@@ -25,6 +25,14 @@ const MEDIOS = [
   { id: 'tarjeta',  nombre: 'Tarjeta',      emoji: '💳' },
 ];
 const MEDIO = Object.fromEntries(MEDIOS.map(m => [m.id, m]));
+// Dónde está la plata líquida. Lo pagado con tarjeta no sale de acá: suma a la deuda hasta que pagás la tarjeta.
+const CUENTAS = [
+  { id: 'efectivo', nombre: 'Efectivo',     emoji: '💵' },
+  { id: 'mp',       nombre: 'Mercado Pago', emoji: '📱' },
+  { id: 'banco',    nombre: 'Banco',        emoji: '🏦' },
+];
+const CUENTA = Object.fromEntries(CUENTAS.map(c => [c.id, c]));
+const CUENTA_DE_MEDIO = { efectivo: 'efectivo', mp: 'mp', debito: 'banco' };
 const KEY = 'gastos-app-v1';
 
 let db = cargar();
@@ -121,6 +129,7 @@ function render() {
   renderInicio();
   renderFijos();
   renderCategoriasAjustes();
+  renderCaja();
 }
 
 function renderInicio() {
@@ -356,7 +365,7 @@ $('#sheet').addEventListener('submit', e => {
   if (edit.tipo === 'gasto') {
     const data = { ...plata, cat: catSel, medio: medioSel, nota: $('#nota').value.trim(), fecha: $('#fecha').value || hoyISO() };
     if (edit.id) Object.assign(db.gastos.find(g => g.id === edit.id), data);
-    else db.gastos.push({ id: uid(), ...data });
+    else db.gastos.push({ id: uid(), creado: Date.now(), ...data });
     mesActual = data.fecha.slice(0, 7);
   } else {
     const nombre = $('#nombre').value.trim() || CAT[catSel].nombre;
@@ -388,8 +397,8 @@ $('#deleteBtn').addEventListener('click', () => {
 // ---------- Eventos ----------
 $('#fab').addEventListener('click', () => abrirSheet($('#view-fijos').classList.contains('active') ? 'fijo' : 'gasto'));
 $('#addFijoBtn').addEventListener('click', () => abrirSheet('fijo'));
-$('#sheetBg').addEventListener('click', cerrarSheet);
-document.addEventListener('keydown', e => e.key === 'Escape' && cerrarSheet());
+$('#sheetBg').addEventListener('click', () => { cerrarSheet(); cerrarCaja(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { cerrarSheet(); cerrarCaja(); } });
 
 $('#prevMes').addEventListener('click', () => { mesActual = sumarMes(mesActual, -1); render(); });
 $('#nextMes').addEventListener('click', () => { mesActual = sumarMes(mesActual, 1); render(); });
@@ -467,7 +476,11 @@ $('#fijosList').addEventListener('click', e => {
     const lista = db.pagos[mesActual] ||= [];
     const i = lista.indexOf(p.dataset.pago);
     i >= 0 ? lista.splice(i, 1) : lista.push(p.dataset.pago);
-    guardar(); renderFijos();
+    // cuándo lo marcaste pagado: desde ahí cuenta para la caja
+    const clave = `${mesActual}|${p.dataset.pago}`;
+    db.pagosTs ||= {};
+    if (i >= 0) delete db.pagosTs[clave]; else db.pagosTs[clave] = Date.now();
+    guardar(); renderFijos(); renderCaja();
     return;
   }
   const f = e.target.closest('[data-fijo]');
@@ -480,6 +493,166 @@ document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click
   $('#fab').hidden = b.dataset.view === 'ajustes';
   window.scrollTo(0, 0);
 }));
+
+// ---------- Caja ----------
+// Se parte de un conteo (cuánto había en cada cuenta y cuánto se debía de tarjeta) y se le suma
+// todo lo que pasó después: gastos, fijos marcados pagados, plata que entró, pases entre cuentas y pagos de tarjeta.
+const tsDe = g => g.creado || parseInt(String(g.id).slice(0, -4), 36) || 0;
+const despuesDelConteo = (fecha, ts) => {
+  const c = db.conteo;
+  return fecha > c.fecha || (fecha === c.fecha && ts > c.ts);
+};
+// los movimientos de la caja: cada uno con cuánto mueve en cada cuenta (+ entra, − sale) y en la deuda de tarjeta
+function movimientosCaja() {
+  const lista = [];
+  const deGasto = (x, monto, fecha, ts, titulo, sub, ref) => {
+    const cuenta = CUENTA_DE_MEDIO[x.medio];
+    if (x.medio === 'tarjeta') lista.push({ fecha, ts, titulo, sub, monto, deuda: monto, ref });
+    else if (cuenta) lista.push({ fecha, ts, titulo, sub, monto: -monto, cuenta, ref });
+    else lista.push({ fecha, ts, titulo, sub, monto: -monto, sinMedio: true, ref });
+  };
+  db.gastos.forEach(g => {
+    if (!despuesDelConteo(g.fecha, tsDe(g))) return;
+    const c = CAT[g.cat] || CAT.otros;
+    deGasto(g, g.monto, g.fecha, tsDe(g), `${c.emoji} ${c.nombre}`, g.nota, { gasto: g.id });
+  });
+  Object.entries(db.pagosTs || {}).forEach(([clave, ts]) => {
+    if (ts <= db.conteo.ts) return;
+    const [ym, id] = clave.split('|');
+    const f = db.fijos.find(x => x.id === id);
+    if (!f || !(db.pagos[ym] || []).includes(id)) return;
+    const c = CAT[f.cat] || CAT.otros;
+    deGasto(f, montoFijo(f), hoyDe(ts), ts, `${c.emoji} ${f.nombre}`, `Fijo de ${mesLabel(ym)}`, { fijo: id });
+  });
+  (db.caja || []).forEach(m => {
+    if (m.ts <= db.conteo.ts) return;
+    const base = { fecha: m.fecha, ts: m.ts, sub: m.nota, ref: { caja: m.id } };
+    if (m.tipo === 'ingreso') lista.push({ ...base, titulo: `${CUENTA[m.a].emoji} Entró a ${CUENTA[m.a].nombre}`, monto: m.monto, cuenta: m.a, entra: true });
+    if (m.tipo === 'mover') lista.push({ ...base, titulo: `↔︎ ${CUENTA[m.de].nombre} → ${CUENTA[m.a].nombre}`, monto: m.monto, de: m.de, a: m.a, pase: true });
+    if (m.tipo === 'pago') lista.push({ ...base, titulo: `💳 Pago de tarjeta`, monto: -m.monto, cuenta: m.de, deuda: -m.monto });
+  });
+  return lista.sort((a, b) => b.fecha.localeCompare(a.fecha) || b.ts - a.ts);
+}
+const hoyDe = ts => new Date(ts - new Date(ts).getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+function estadoCaja() {
+  const saldos = { ...db.conteo.saldos };
+  let deuda = Number(db.conteo.tarjeta) || 0, sinMedio = 0;
+  const movs = movimientosCaja();
+  movs.forEach(m => {
+    if (m.sinMedio) { sinMedio++; return; }
+    if (m.pase) { saldos[m.de] -= m.monto; saldos[m.a] += m.monto; return; }
+    if (m.cuenta) saldos[m.cuenta] += m.monto;
+    if (m.deuda) deuda += m.deuda;
+  });
+  const liquido = CUENTAS.reduce((t, c) => t + (saldos[c.id] || 0), 0);
+  return { saldos, deuda, liquido, movs, sinMedio };
+}
+
+function renderCaja() {
+  const hay = !!db.conteo;
+  $('#cajaVacia').hidden = hay;
+  $('#cajaLlena').hidden = !hay;
+  if (!hay) return;
+  const e = estadoCaja();
+  $('#liquido').textContent = fmt(e.liquido);
+  $('#liquidoCuentas').innerHTML = CUENTAS.map(c => `<span>${c.emoji} ${c.nombre} <b>${fmt(e.saldos[c.id] || 0)}</b></span>`).join('');
+  $('#deuda').textContent = fmt(e.deuda);
+  $('#libre').textContent = fmt(e.liquido - e.deuda);
+  const [, m, d] = db.conteo.fecha.split('-');
+  $('#cajaDesde').textContent = `· desde que contaste, el ${d}/${m}`;
+  $('#cajaMovs').innerHTML = e.movs.length ? e.movs.map(x => {
+    const donde = x.pase ? '' : x.deuda > 0 ? '💳 a la tarjeta' : x.sinMedio ? 'sin medio: no se descontó' : x.cuenta ? `${CUENTA[x.cuenta].emoji} ${CUENTA[x.cuenta].nombre}` : '';
+    const sub = [donde, x.sub ? esc(x.sub) : ''].filter(Boolean).join(' · ');
+    const attrs = x.ref.gasto ? `data-gasto="${x.ref.gasto}"` : x.ref.caja ? `data-caja-mov="${x.ref.caja}"` : `data-fijo-caja="${x.ref.fijo}"`;
+    const signo = x.pase ? '' : x.monto > 0 && !x.deuda ? '+' : '−';
+    return `<button class="mov" ${attrs}>
+      <div class="info"><b>${x.titulo}</b>${sub ? `<small>${sub}</small>` : ''}</div>
+      <div class="amt ${x.entra ? 'mas' : ''}">${signo}${fmt(Math.abs(x.monto))}<small>${diaLabel(x.fecha)}</small></div></button>`;
+  }).join('') : `<div class="empty">Todavía no hubo movimientos desde que contaste.</div>`;
+  $('#cajaNota').textContent = e.sinMedio
+    ? `${e.sinMedio} ${e.sinMedio === 1 ? 'gasto no tiene' : 'gastos no tienen'} medio de pago y no se ${e.sinMedio === 1 ? 'descontó' : 'descontaron'}: tocalo y elegí cómo lo pagaste.`
+    : 'Lo que pagás con tarjeta no baja la plata líquida: se suma a "Tarjeta a pagar" hasta que la pagás.';
+}
+
+// hoja para cargar: plata que entró, pase entre cuentas, pago de tarjeta o un conteo nuevo
+let cajaModo = null, cajaEdit = null;
+const chipsCuenta = (nombre, sel) => `<div class="moneda-toggle" data-chips="${nombre}">${CUENTAS.map(c =>
+  `<button type="button" class="${c.id === sel ? 'sel' : ''}" data-val="${c.id}">${c.emoji} ${c.nombre}</button>`).join('')}</div>`;
+const campoPlata = (id, label, valor, ayuda) => `<label class="campo-caja"><span>${label}</span>
+  <input id="${id}" class="input" inputmode="decimal" placeholder="Ej: 150.000" value="${valor ? formatearMonto(String(valor).replace('.', ',')) : ''}">
+  ${ayuda ? `<small class="ayuda">${ayuda}</small>` : ''}</label>`;
+function abrirCaja(modo, mov) {
+  cajaModo = modo; cajaEdit = mov || null;
+  const e = db.conteo ? estadoCaja() : null;
+  const nota = `<label class="campo-caja"><span>Nota <small>· opcional</small></span><input id="cajaNotaInput" class="input" placeholder="Ej: sueldo de octubre" value="${esc(mov?.nota || '')}"></label>`;
+  const titulos = { ingreso: 'Me entró plata', mover: 'Pasar entre cuentas', pago: 'Pagar tarjeta', conteo: 'Contar mi plata' };
+  $('#cajaTitulo').textContent = titulos[modo];
+  let html = '';
+  if (modo === 'ingreso') html = campoPlata('cajaMonto', 'Cuánto', mov?.monto) +
+    `<div class="campo-caja"><span>Dónde entró</span>${chipsCuenta('a', mov?.a || 'mp')}</div>` + nota;
+  if (modo === 'mover') html = campoPlata('cajaMonto', 'Cuánto', mov?.monto, 'Ej: sacaste del cajero = de Banco a Efectivo') +
+    `<div class="campo-caja"><span>De</span>${chipsCuenta('de', mov?.de || 'banco')}</div>
+     <div class="campo-caja"><span>A</span>${chipsCuenta('a', mov?.a || 'efectivo')}</div>` + nota;
+  if (modo === 'pago') html = campoPlata('cajaMonto', 'Cuánto pagaste', mov?.monto ?? (e && e.deuda > 0 ? e.deuda : ''),
+      e ? `Debés ${fmt(e.deuda)} de tarjeta` : '') +
+    `<div class="campo-caja"><span>Con qué la pagaste</span>${chipsCuenta('de', mov?.de || 'banco')}</div>` + nota;
+  if (modo === 'conteo') html = `<p class="muted small">Poné lo que hay hoy de verdad. Desde ahora la caja arranca de estos números.</p>` +
+    CUENTAS.map(c => campoPlata('conteo-' + c.id, `${c.emoji} ${c.nombre}`, e ? Math.max(0, e.saldos[c.id]) : '')).join('') +
+    campoPlata('conteo-tarjeta', '💳 Tarjeta a pagar', e ? Math.max(0, e.deuda) : '', 'Lo que vas a pagar en el próximo resumen (0 si no debés nada)');
+  $('#cajaCampos').innerHTML = html;
+  $('#cajaBorrar').hidden = !mov;
+  document.body.classList.add('open-caja');
+}
+function cerrarCaja() {
+  document.body.classList.remove('open-caja');
+  document.activeElement?.blur();
+  cajaModo = null; cajaEdit = null;
+}
+const chipElegido = nombre => $(`#cajaCampos [data-chips="${nombre}"] .sel`)?.dataset.val;
+$('#cajaCampos').addEventListener('click', e => {
+  const b = e.target.closest('[data-chips] button');
+  if (!b) return;
+  b.parentElement.querySelectorAll('button').forEach(x => x.classList.toggle('sel', x === b));
+});
+$('#cajaCampos').addEventListener('input', e => {
+  if (e.target.matches('input[inputmode="decimal"]')) e.target.value = formatearMonto(e.target.value.replace(/\./g, ''));
+});
+$('#sheetCaja').addEventListener('submit', e => {
+  e.preventDefault();
+  if (cajaModo === 'conteo') {
+    const saldos = {};
+    for (const c of CUENTAS) saldos[c.id] = parseMonto($('#conteo-' + c.id).value) || 0;
+    const ahora = Date.now();
+    db.conteo = { ts: ahora, fecha: hoyISO(), saldos, tarjeta: parseMonto($('#conteo-tarjeta').value) || 0 };
+    guardar(); cerrarCaja(); render(); toast('Caja contada ✓');
+    return;
+  }
+  const monto = parseMonto($('#cajaMonto').value);
+  if (!monto) return toast('Poné cuánto');
+  const mov = { tipo: cajaModo, monto, nota: $('#cajaNotaInput').value.trim() };
+  if (cajaModo === 'ingreso') mov.a = chipElegido('a');
+  if (cajaModo === 'mover') { mov.de = chipElegido('de'); mov.a = chipElegido('a'); if (mov.de === mov.a) return toast('Elegí dos cuentas distintas'); }
+  if (cajaModo === 'pago') mov.de = chipElegido('de');
+  db.caja ||= [];
+  if (cajaEdit) Object.assign(cajaEdit, mov);
+  else db.caja.push({ id: uid(), ts: Date.now(), fecha: hoyISO(), ...mov });
+  guardar(); cerrarCaja(); render();
+  toast({ ingreso: 'Ingreso anotado ✓', mover: 'Pase anotado ✓', pago: 'Pago de tarjeta anotado ✓' }[mov.tipo]);
+});
+$('#cajaBorrar').addEventListener('click', () => {
+  if (!cajaEdit) return;
+  db.caja = db.caja.filter(m => m !== cajaEdit);
+  guardar(); cerrarCaja(); render(); toast('Eliminado');
+});
+document.querySelectorAll('[data-caja]').forEach(b => b.addEventListener('click', () => abrirCaja(b.dataset.caja)));
+$('#cajaMovs').addEventListener('click', e => {
+  const g = e.target.closest('[data-gasto]');
+  if (g) return abrirSheet('gasto', db.gastos.find(x => x.id === g.dataset.gasto));
+  const m = e.target.closest('[data-caja-mov]');
+  if (m) { const mov = db.caja.find(x => x.id === m.dataset.cajaMov); if (mov) abrirCaja(mov.tipo, mov); return; }
+  const f = e.target.closest('[data-fijo-caja]');
+  if (f) abrirSheet('fijo', db.fijos.find(x => x.id === f.dataset.fijoCaja));
+});
 
 // ---------- Ajustes ----------
 function descargar(nombre, contenido, tipo) {
@@ -553,7 +726,7 @@ $('#monedaInput').addEventListener('change', e => {
 
 $('#resetBtn').addEventListener('click', () => {
   if (!confirm('¿Borrar TODOS tus gastos? No se puede deshacer.')) return;
-  db = { moneda: db.moneda, tc: db.tc, categorias: db.categorias, medioUlt: db.medioUlt, gastos: [], fijos: [], pagos: {} };
+  db = { moneda: db.moneda, tc: db.tc, categorias: db.categorias, medioUlt: db.medioUlt, gastos: [], fijos: [], pagos: {}, caja: [] };
   guardar(); render(); toast('Datos borrados');
 });
 

@@ -168,8 +168,8 @@ h2 small { text-transform: none; letter-spacing: 0; font-weight: 400; }
   transform: translateY(105%); transition: transform .25s cubic-bezier(.2,.8,.2,1);
   max-height: 92vh; overflow-y: auto;
 }
-.open .sheet-bg { opacity: 1; pointer-events: auto; }
-.open .sheet { transform: none; }
+.open .sheet-bg, .open-caja .sheet-bg { opacity: 1; pointer-events: auto; }
+.open #sheet, .open-caja #sheetCaja { transform: none; }
 .grab { width: 40px; height: 5px; border-radius: 3px; background: var(--line); margin: 0 auto 8px; }
 .sheet h3 { text-align: center; font-size: 15px; font-weight: 600; margin: 4px 0 6px; color: var(--muted); }
 .amount-wrap { display: flex; justify-content: center; align-items: baseline; gap: 4px; margin: 4px 0 14px; }
@@ -207,3 +207,14 @@ h2 small { text-transform: none; letter-spacing: 0; font-weight: 400; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 .mov .fijo-btn { padding: 0; flex: 1; min-width: 0; }
 .mov .fijo-btn:active { background: none; }
+
+/* caja */
+.total-card + .total-card { margin-top: 12px; }
+.total-sm { font-size: 30px; }
+.caja-acciones { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.caja-acciones .btn { padding: 14px 8px; font-size: 15px; }
+.campo-caja { display: block; margin-bottom: 12px; }
+.campo-caja > span { display: block; font-size: 13px; color: var(--muted); margin: 0 4px 6px; }
+.campo-caja .moneda-toggle { margin: 0; justify-content: flex-start; flex-wrap: wrap; }
+.campo-caja .ayuda { display: block; font-size: 13px; color: var(--muted); margin: 6px 4px 0; }
+.mov .amt.mas { color: var(--accent); }
