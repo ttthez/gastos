@@ -4,7 +4,8 @@ App minimalista de control de gastos personales. Funciona 100% en el navegador, 
 
 ## Qué hace
 
-- **Cargar un gasto en 3 toques**: botón `+` → monto → categoría → Guardar.
+- **Cargar un gasto en 4 toques**: botón `+` → monto → categoría → cómo lo pagaste → Guardar.
+- **Medio de pago**: Efectivo, Mercado Pago, Débito o Tarjeta. Arranca con el último que usaste; Inicio muestra el total por medio y, tocándolo, qué se pagó así (ej: todo lo que viene en el resumen de la tarjeta).
 - **Categorías** con emoji: Súper, Salir a comer, Café, Transporte, Regalos, Ocio, Ropa, Salud, Hogar, Servicios, Suscripción, Gym, Viajes, Mascotas, Educación, Otros.
 - **Gastos fijos** (gym, Netflix, alquiler…): se cargan una vez y se suman solos todos los meses. Podés marcar cuáles ya pagaste en el mes.
 - **Resumen mensual**: total, variables vs. fijos y barras por categoría. Cambiás de mes con las flechas.
