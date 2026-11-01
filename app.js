@@ -688,18 +688,29 @@ $('#sumarInput').addEventListener('change', async e => {
     const clave = g => `${g.fecha}|${g.monto}|${g.nota || ''}`;
     const ids = new Set(db.gastos.map(g => g.id));
     const claves = new Set(db.gastos.map(clave));
-    let sumados = 0, repetidos = 0;
+    const porClave = new Map(db.gastos.map(g => [clave(g), g]));
+    let sumados = 0, repetidos = 0, completados = 0;
     for (const g of lista) {
       const monto = Number(g.monto);
       if (!(monto > 0) || !/^\d{4}-\d{2}-\d{2}$/.test(g.fecha || '')) continue;
       const nuevo = { id: g.id || uid(), monto, cat: CAT[g.cat] ? g.cat : 'otros', nota: String(g.nota || ''), fecha: g.fecha };
       if (g.moneda === 'USD' && Number(g.usd) > 0) Object.assign(nuevo, { moneda: 'USD', usd: Number(g.usd), tc: Number(g.tc) || undefined });
       if (MEDIO[g.medio]) nuevo.medio = g.medio;
-      if (ids.has(nuevo.id) || claves.has(clave(nuevo))) { repetidos++; continue; }
+      if (ids.has(nuevo.id) || claves.has(clave(nuevo))) {
+        // si ya lo tenías sin medio de pago y el archivo lo trae, se completa
+        const ya = db.gastos.find(x => x.id === nuevo.id) || porClave.get(clave(nuevo));
+        if (ya && !MEDIO[ya.medio] && nuevo.medio) { ya.medio = nuevo.medio; completados++; } else repetidos++;
+        continue;
+      }
       db.gastos.push(nuevo); ids.add(nuevo.id); claves.add(clave(nuevo)); sumados++;
     }
+    // los fijos del archivo solo completan el medio de pago de los tuyos con el mismo nombre
+    for (const f of Array.isArray(d) ? [] : d.fijos || []) {
+      const mio = db.fijos.find(x => x.nombre.toLowerCase() === String(f.nombre || '').toLowerCase());
+      if (mio && !MEDIO[mio.medio] && MEDIO[f.medio]) { mio.medio = f.medio; completados++; }
+    }
     guardar(); render();
-    toast(`${sumados} gastos sumados` + (repetidos ? ` · ${repetidos} ya estaban` : ''));
+    toast(`${sumados} gastos sumados` + (completados ? ` · ${completados} con medio completado` : '') + (repetidos ? ` · ${repetidos} ya estaban` : ''));
   } catch { toast('Archivo inválido'); }
   e.target.value = '';
 });
