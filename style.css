@@ -82,7 +82,10 @@ h2 small { text-transform: none; letter-spacing: 0; font-weight: 400; }
 .link { border: 0; background: none; color: var(--accent); font: inherit; font-size: 14px; padding: 0 0 0 6px; text-transform: none; letter-spacing: 0; cursor: pointer; }
 .danger-link { color: var(--danger); }
 .cat-form { margin-top: 10px; }
-.cat-form .emoji-input { width: 64px; flex: none; text-align: center; }
+.cat-form .emoji-input, .cat-edit .emoji-input { width: 64px; flex: none; text-align: center; }
+.cat-edit { gap: 8px; flex-wrap: wrap; }
+.cat-edit .input:not(.emoji-input) { flex: 1 1 120px; min-width: 0; }
+.cat-edit .btn { padding: 10px 14px; }
 .cat-row:last-child { border-bottom: 0; }
 .cat-row .head { display: flex; justify-content: space-between; align-items: center; font-size: 15px; }
 .cat-row .head span:first-child { display: flex; gap: 10px; align-items: center; }
