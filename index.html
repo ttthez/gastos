@@ -108,10 +108,16 @@
         <button type="submit" class="btn primary">Agregar</button>
       </form>
       <h2>Moneda</h2>
-      <input id="monedaInput" class="input" maxlength="4" placeholder="$">
-      <h2>Dólar</h2>
-      <input id="tcInput" class="input" inputmode="decimal" placeholder="Cotización: pesos por US$ (ej: 1450)">
-      <p class="muted small">Pasa a pesos tus fijos en dólares (suscripciones) y es la cotización sugerida al cargar un gasto en US$. Se actualiza sola con la última que uses.</p>
+      <div class="moneda-toggle divisa-toggle" id="divisaToggle">
+        <button type="button" data-divisa="ARS">$ Pesos</button>
+        <button type="button" data-divisa="EUR">€ Euros</button>
+      </div>
+      <p class="muted small">En euros los medios de pago son efectivo, Bizum, débito y tarjeta, y no se cargan gastos en dólares. No convierte los montos que ya cargaste.</p>
+      <div id="dolarWrap">
+        <h2>Dólar</h2>
+        <input id="tcInput" class="input" inputmode="decimal" placeholder="Cotización: pesos por US$ (ej: 1450)">
+        <p class="muted small">Pasa a pesos tus fijos en dólares (suscripciones) y es la cotización sugerida al cargar un gasto en US$. Se actualiza sola con la última que uses.</p>
+      </div>
       <h2>Zona peligrosa</h2>
       <button class="btn danger full" id="resetBtn">Borrar todo</button>
     </section>
