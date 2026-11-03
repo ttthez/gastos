@@ -484,18 +484,44 @@ $('#movTitulo').addEventListener('click', e => {
 });
 
 // ---------- Categorías (Ajustes) ----------
+let catEditando = null; // id de la categoría que se está editando en Ajustes
 function renderCategoriasAjustes() {
   const usos = id => db.gastos.filter(g => g.cat === id).length + db.fijos.filter(f => f.cat === id).length;
   $('#catsList').innerHTML = cats().map(c => {
+    if (c.id === catEditando) return `<form class="mov cat-edit" data-editar-form="${c.id}">
+      <input class="input emoji-input" name="emoji" maxlength="4" value="${esc(c.emoji)}" aria-label="Emoji">
+      <input class="input" name="nombre" value="${esc(c.nombre)}" placeholder="Nombre (ej: Peluquería)" aria-label="Nombre">
+      <button type="submit" class="btn primary">Guardar</button>
+      <button type="button" class="link" data-cancelar-cat>Cancelar</button>
+    </form>`;
     const n = usos(c.id);
     return `<div class="mov">
       <div class="emoji">${c.emoji}</div>
       <div class="info"><b>${esc(c.nombre)}</b><small>${n ? `${n} gasto${n === 1 ? '' : 's'}` : 'Sin gastos'}</small></div>
+      <button class="link" data-editar-cat="${c.id}">Editar</button>
       ${c.id === 'otros' ? '' : `<button class="link danger-link" data-quitar-cat="${c.id}">Quitar</button>`}
     </div>`;
   }).join('');
+  const form = $('#catsList [data-editar-form]');
+  if (form) form.elements.nombre.focus();
 }
+// editar nombre y emoji: los gastos quedan en la misma categoría (se guarda el id, no el nombre)
+$('#catsList').addEventListener('submit', e => {
+  const form = e.target.closest('[data-editar-form]');
+  if (!form) return;
+  e.preventDefault();
+  const id = form.dataset.editarForm;
+  const nombre = form.elements.nombre.value.trim();
+  if (!nombre) return toast('Poné el nombre de la categoría');
+  if (cats().some(c => c.id !== id && c.nombre.toLowerCase() === nombre.toLowerCase())) return toast('Ya hay otra categoría con ese nombre');
+  db.categorias = cats().map(c => c.id === id ? { ...c, nombre, emoji: form.elements.emoji.value.trim() || c.emoji } : { ...c });
+  catEditando = null;
+  guardar(); render(); toast('Categoría editada ✓');
+});
 $('#catsList').addEventListener('click', e => {
+  const ed = e.target.closest('[data-editar-cat]');
+  if (ed) { catEditando = ed.dataset.editarCat; renderCategoriasAjustes(); return; }
+  if (e.target.closest('[data-cancelar-cat]')) { catEditando = null; renderCategoriasAjustes(); return; }
   const b = e.target.closest('[data-quitar-cat]');
   if (!b) return;
   const id = b.dataset.quitarCat;
