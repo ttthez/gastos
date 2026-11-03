@@ -200,6 +200,7 @@ h2 small { text-transform: none; letter-spacing: 0; font-weight: 400; }
 .usd-line { font-size: 14px; margin-top: 8px; }
 .medio-label { text-align: center; margin: 4px 0 6px; }
 .medio-toggle { flex-wrap: wrap; margin: 0 0 14px; }
+.divisa-toggle { justify-content: flex-start; margin: 0 4px 8px; }
 .mov .amt small { display: block; color: var(--muted); font-size: 12px; font-weight: 400; text-align: right; }
 .row .date { width: 150px; flex: none; }
 #dia.date { width: 90px; }

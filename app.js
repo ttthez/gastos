@@ -17,22 +17,41 @@ const CATEGORIAS = [
   { id: 'educ',     nombre: 'Educación',   emoji: '📚' },
   { id: 'otros',    nombre: 'Otros',       emoji: '•' },
 ];
+// Moneda de la app: pesos (con gastos en dólares aparte) o euros (para quien vive en España).
+// Cambia el símbolo, los medios de pago y las cuentas de la caja; no convierte montos ya cargados.
+const DIVISAS = {
+  ARS: { nombre: 'Pesos', simbolo: '$', dolares: true,
+    medios: ['efectivo', 'mp', 'debito', 'tarjeta'], cuentas: ['efectivo', 'mp', 'banco'] },
+  EUR: { nombre: 'Euros', simbolo: '€', dolares: false,
+    medios: ['efectivo', 'bizum', 'debito', 'tarjeta'], cuentas: ['efectivo', 'banco'] },
+};
 // Con qué se pagó: sirve para saber cuánto fue en efectivo y cuánto viene en el resumen de la tarjeta
-const MEDIOS = [
+const TODOS_MEDIOS = [
   { id: 'efectivo', nombre: 'Efectivo',     emoji: '💵' },
   { id: 'mp',       nombre: 'Mercado Pago', emoji: '📱' },
+  { id: 'bizum',    nombre: 'Bizum',        emoji: '📲' },
   { id: 'debito',   nombre: 'Débito',       emoji: '🏦' },
   { id: 'tarjeta',  nombre: 'Tarjeta',      emoji: '💳' },
 ];
-const MEDIO = Object.fromEntries(MEDIOS.map(m => [m.id, m]));
+const MEDIO = Object.fromEntries(TODOS_MEDIOS.map(m => [m.id, m]));
 // Dónde está la plata líquida. Lo pagado con tarjeta no sale de acá: suma a la deuda hasta que pagás la tarjeta.
-const CUENTAS = [
+const TODAS_CUENTAS = [
   { id: 'efectivo', nombre: 'Efectivo',     emoji: '💵' },
   { id: 'mp',       nombre: 'Mercado Pago', emoji: '📱' },
   { id: 'banco',    nombre: 'Banco',        emoji: '🏦' },
 ];
-const CUENTA = Object.fromEntries(CUENTAS.map(c => [c.id, c]));
-const CUENTA_DE_MEDIO = { efectivo: 'efectivo', mp: 'mp', debito: 'banco' };
+const CUENTA = Object.fromEntries(TODAS_CUENTAS.map(c => [c.id, c]));
+const CUENTA_DE_MEDIO = { efectivo: 'efectivo', mp: 'mp', debito: 'banco', bizum: 'banco' };
+// los que se eligen según la moneda (se rearman con refrescarDivisa)
+let MEDIOS = [], CUENTAS = [];
+const divisa = () => DIVISAS[db.divisa] || DIVISAS.ARS;
+function refrescarDivisa() {
+  const d = divisa();
+  const efectivo = db.divisa === 'EUR' ? '💶' : '💵';
+  MEDIO.efectivo.emoji = efectivo; CUENTA.efectivo.emoji = efectivo;
+  MEDIOS = d.medios.map(id => MEDIO[id]);
+  CUENTAS = d.cuentas.map(id => CUENTA[id]);
+}
 const KEY = 'gastos-app-v1';
 
 let db = cargar();
@@ -73,10 +92,12 @@ function hoyISO() {
 function fmt(n) {
   const dec = Number.isInteger(n) ? 0 : 2;
   const s = Math.abs(n).toLocaleString('es-AR', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+  // en euros el símbolo va al final (1.234,50 €)
+  if (db.divisa === 'EUR') return (n < 0 ? '-' : '') + s + ' €';
   return (n < 0 ? '-' : '') + db.moneda + s;
 }
 function parseMonto(str) {
-  let s = String(str).replace(/\s|\$/g, '');
+  let s = String(str).replace(/\s|\$|€/g, '');
   if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
   else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');
   const n = parseFloat(s);
@@ -122,9 +143,12 @@ const amtHtml = (x, pesos) => x.moneda === 'USD' ? `${fmtUsd(x.usd)}<small>${fmt
 // ---------- Render ----------
 function render() {
   refrescarCats();
+  refrescarDivisa();
   $('#mesLabel').textContent = mesLabel(mesActual);
-  $('#monedaSym').textContent = db.moneda;
-  $('#monedaInput').value = db.moneda;
+  $('#monedaSym').textContent = divisa().simbolo === '$' ? db.moneda : divisa().simbolo;
+  $('#divisaToggle').querySelectorAll('button').forEach(b => b.classList.toggle('sel', b.dataset.divisa === (db.divisa || 'ARS')));
+  $('#dolarWrap').hidden = !divisa().dolares;
+  $('#monedaToggle').hidden = !divisa().dolares;
   $('#tcInput').value = db.tc || '';
   renderInicio();
   renderFijos();
@@ -293,7 +317,7 @@ function abrirSheet(tipo, item) {
 function aplicarMoneda() {
   const usd = monedaSel === 'USD';
   $('#monedaToggle').querySelectorAll('button').forEach(b => b.classList.toggle('sel', b.dataset.moneda === monedaSel));
-  $('#monedaSym').textContent = usd ? 'US$' : db.moneda;
+  $('#monedaSym').textContent = usd ? 'US$' : (db.divisa === 'EUR' ? '€' : db.moneda);
   // los fijos usan la cotización de Ajustes; los gastos piden la del día
   $('#tcWrap').hidden = !usd || edit?.tipo !== 'gasto';
   ajustarMonto();
@@ -756,17 +780,27 @@ $('#tcInput').addEventListener('change', e => {
   guardar(); render();
 });
 
-$('#monedaInput').addEventListener('change', e => {
-  db.moneda = e.target.value.trim() || '$';
-  guardar(); render();
+$('#divisaToggle').addEventListener('click', e => {
+  const b = e.target.closest('[data-divisa]');
+  if (!b || b.dataset.divisa === (db.divisa || 'ARS')) return;
+  const nombre = DIVISAS[b.dataset.divisa].nombre.toLowerCase();
+  if (db.gastos.length && !confirm(`¿Pasar la app a ${nombre}? Los montos que ya cargaste no se convierten: solo cambia el símbolo.`)) return;
+  db.divisa = b.dataset.divisa;
+  if (!MEDIO[db.medioUlt] || !DIVISAS[db.divisa].medios.includes(db.medioUlt)) db.medioUlt = undefined;
+  guardar(); render(); toast(`App en ${nombre} ✓`);
 });
 
 $('#resetBtn').addEventListener('click', () => {
   if (!confirm('¿Borrar TODOS tus gastos? No se puede deshacer.')) return;
-  db = { moneda: db.moneda, tc: db.tc, categorias: db.categorias, medioUlt: db.medioUlt, gastos: [], fijos: [], pagos: {}, caja: [] };
+  db = { moneda: db.moneda, divisa: db.divisa, tc: db.tc, categorias: db.categorias, medioUlt: db.medioUlt, gastos: [], fijos: [], pagos: {}, caja: [] };
   guardar(); render(); toast('Datos borrados');
 });
 
 // ---------- Inicio ----------
+// un link con ?moneda=EUR deja la app en euros la primera vez que se abre (para pasársela a alguien en España)
+const monedaLink = new URLSearchParams(location.search).get('moneda');
+if (monedaLink && DIVISAS[monedaLink.toUpperCase()] && !db.divisa && !db.gastos.length) {
+  db.divisa = monedaLink.toUpperCase(); guardar();
+}
 render();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
